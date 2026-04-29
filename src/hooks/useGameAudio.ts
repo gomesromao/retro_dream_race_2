@@ -25,7 +25,7 @@ export const useGameAudio = () => {
     
     osc.type = 'sawtooth';
     osc.frequency.value = 80;
-    gain.gain.value = 0.03;
+    gain.gain.value = 0.003;
     
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -40,7 +40,7 @@ export const useGameAudio = () => {
     if (engineOscRef.current && engineGainRef.current) {
       const ratio = speed / maxSpeed;
       engineOscRef.current.frequency.value = 60 + ratio * 140;
-      engineGainRef.current.gain.value = 0.02 + ratio * 0.04;
+      engineGainRef.current.gain.value = 0.002 + ratio * 0.004;
     }
   }, []);
 
