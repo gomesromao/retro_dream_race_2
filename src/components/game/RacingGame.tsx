@@ -66,6 +66,8 @@ interface Opponent {
   acceleration: number;
   style: 'aggressive' | 'defensive' | 'neutral'; // driving style per race
   launchReaction: number; // 0-1 random reaction delay at start
+  tilt: number; // visual lean angle in degrees (smoothed)
+  prevX: number; // last frame x — used to derive lateral velocity for tilt
 }
 
 interface Scenery {
@@ -155,7 +157,9 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
     position: 0,
     speed: 0,
     maxSpeed: playerMaxSpeed,
-    keys: { left: false, right: false, up: false },
+    playerTilt: 0, // smoothed visual lean angle in degrees
+    skidTrails: [] as { x: number; y: number; alpha: number; size: number }[],
+    keys: { left: false, right: false, up: false, down: false },
     opponents: [] as Opponent[],
     scenery: [] as Scenery[],
     segments: [] as Segment[],
@@ -246,12 +250,14 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
       if (e.key === 'ArrowLeft') g.keys.left = true;
       if (e.key === 'ArrowRight') g.keys.right = true;
       if (e.key === 'ArrowUp') g.keys.up = true;
+      if (e.key === 'ArrowDown') g.keys.down = true;
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const g = gameRef.current;
       if (e.key === 'ArrowLeft') g.keys.left = false;
       if (e.key === 'ArrowRight') g.keys.right = false;
       if (e.key === 'ArrowUp') g.keys.up = false;
+      if (e.key === 'ArrowDown') g.keys.down = false;
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -298,7 +304,11 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
     
     // Aligned side by side: 2 left of player, 2 right
     const gridXPositions = [-0.45, -0.22, 0.22, 0.45];
-    
+
+    // Give each opponent a distinct rear-view sprite so the field looks varied.
+    // Rendering only has art for these four — keep the list in sync with the if/else below.
+    const oppCarTypes = ['thunder', 'viper', 'phantom', 'dirtbeast'].sort(() => Math.random() - 0.5);
+
     for (let i = 0; i < 4; i++) {
       const skill = shuffled[i];
       const accelVariance = 1.0 + Math.random() * 0.06; // 1.0-1.06 — AI can accelerate faster
@@ -309,12 +319,14 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
         maxSpeed: playerMaxSpeed * skill,
         targetX: gridXPositions[i],
         color: oppColors[i],
-        carType: 'opp',
+        carType: oppCarTypes[i],
         name: OPPONENT_NAMES[i],
         skillLevel: skill,
         acceleration: playerAccel * accelVariance,
         style: shuffledStyles[i],
         launchReaction: 0.6 + Math.random() * 0.4, // faster reactions: 0.6-1.0
+        tilt: 0,
+        prevX: gridXPositions[i],
       });
     }
     
@@ -376,32 +388,44 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
       // Only update physics if race has started
       if (g.raceStarted) {
         // --- PLAYER PHYSICS ---
+        // Capture pre-frame X so we can derive lateral velocity for the body lean
+        const prevPlayerX = g.playerX;
+
         // Launch control: tighter ramp so the player's car doesn't jump ahead at the start
         const launchZone = Math.min(1, g.position / 2400);
         const launchCurve = launchZone * launchZone;
         const playerSpeedCap = playerMaxSpeed * (0.12 + launchCurve * 0.88);
-        
+
         if (g.keys.up) {
           const speedRatio = g.speed / playerMaxSpeed;
           const accelFactor = Math.max(0.3, 1 - speedRatio * 0.55);
           g.speed = Math.min(g.speed + playerAccel * accelFactor * dt, playerSpeedCap);
+        } else if (g.keys.down) {
+          // Active brake — sharper deceleration than coasting
+          g.speed = Math.max(g.speed - 180 * dt, 0);
         } else {
           // Coasting - gradual deceleration but not too punishing
           g.speed = Math.max(g.speed - 40 * dt, 0);
         }
-        
+
         audio.updateEngine(g.speed, playerMaxSpeed);
 
-        // Steering — smooth and controlled
+        // Steering — snappier base response, still scales with speed but no longer dead at low speeds
         const speedFactor = g.speed / playerMaxSpeed;
-        const steer = playerHandling * 0.75 * dt * Math.min(1, speedFactor * 2);
-        
+        const steer = playerHandling * 0.95 * dt * (0.25 + Math.min(1, speedFactor * 1.8) * 0.85);
+
+        const steeringInputRaw = (g.keys.right ? 1 : 0) - (g.keys.left ? 1 : 0);
         if (g.keys.left) g.playerX -= steer;
         if (g.keys.right) g.playerX += steer;
 
-        // Curve drift — strong outward push so the car won't hold the line by itself
+        // Curve drift — outward push, but reduced when actively counter-steering so the player
+        // can fight the curve instead of just being shoved off the racing line.
+        const counteringCurve =
+          (currentCurve > 0 && g.keys.left) ||
+          (currentCurve < 0 && g.keys.right);
+        const curvePushMul = counteringCurve ? 0.55 : 1.0;
         const rainDriftBonus = g.weather.active && g.weather.type === 'rain' ? g.weather.intensity * 0.08 : 0;
-        g.playerX -= currentCurve * speedFactor * dt * (0.42 + rainDriftBonus);
+        g.playerX -= currentCurve * speedFactor * dt * (0.42 + rainDriftBonus) * curvePushMul;
         
         // Wind push on player
         if (g.weather.active && g.weather.type === 'wind') {
@@ -421,6 +445,34 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
         }
         
         g.playerX = Math.max(-2.5, Math.min(2.5, g.playerX));
+
+        // Smoothed body lean: combines steering input + lateral velocity from curves/wind.
+        // Lateral velocity reads the *actual* sideways motion (in world units/s), so the car
+        // visibly leans during natural curve drift, not only when keys are pressed.
+        const lateralVelX = (g.playerX - prevPlayerX) / Math.max(dt, 0.0001);
+        const targetTilt = steeringInputRaw * 4.5 - lateralVelX * 8.0;
+        const tiltLerp = Math.min(1, dt * 9);
+        g.playerTilt += (targetTilt - g.playerTilt) * tiltLerp;
+        // Cap so it never rolls absurdly
+        g.playerTilt = Math.max(-12, Math.min(12, g.playerTilt));
+
+        // Spawn dust skid puffs when cornering hard at speed (visual feedback for grip)
+        if (Math.abs(steeringInputRaw) > 0 && speedFactor > 0.55 && Math.random() < speedFactor * 0.6) {
+          const puffSide = steeringInputRaw > 0 ? -1 : 1; // dust kicks out from the inside wheel
+          g.skidTrails.push({
+            x: W / 2 + puffSide * (18 + Math.random() * 6),
+            y: H - 28 + (Math.random() - 0.5) * 6,
+            alpha: 0.55,
+            size: 4 + Math.random() * 3,
+          });
+          if (g.skidTrails.length > 40) g.skidTrails.shift();
+        }
+        // Fade and drift puffs
+        for (const puff of g.skidTrails) {
+          puff.alpha -= dt * 1.4;
+          puff.size += dt * 6;
+        }
+        g.skidTrails = g.skidTrails.filter(p => p.alpha > 0);
 
         // Off-road penalty — very gentle
         if (Math.abs(g.playerX) > 0.5) {
@@ -560,21 +612,32 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
           const rawTarget = optimalX + personality + blockingOffset + lateralSeek + mistake;
           opp.targetX = Math.max(-0.45, Math.min(0.45, rawTarget));
           
+          // Capture pre-frame X so we can derive a smoothed body lean for the sprite
+          const oppPrevX = opp.x;
+
           // Smooth steering interpolation
           const oppSteerSpeed = 1.5 * opp.skillLevel * dt;
           opp.x += (opp.targetX - opp.x) * oppSteerSpeed;
-          
+
           // Curve pushes AI too (same physics as player, rain increases drift)
           const oppSpeedFactor = opp.speed / opp.maxSpeed;
           const oppRainDrift = g.weather.active && g.weather.type === 'rain' ? g.weather.intensity * 0.15 : 0;
           opp.x += oppCurve * oppSpeedFactor * dt * (0.5 + oppRainDrift);
-          
+
           // Wind affects AI too
           if (g.weather.active && g.weather.type === 'wind') {
             opp.x += g.weather.windDirection * g.weather.intensity * 0.025 * dt;
           }
-          
+
           opp.x = Math.max(-0.5, Math.min(0.5, opp.x));
+
+          // Smooth lean toward lateral velocity. Multiplier tuned so a tight curve
+          // gives ~6-9 deg of roll, and small steering corrections give a subtle wobble.
+          const oppLateralVel = (opp.x - oppPrevX) / Math.max(dt, 0.0001);
+          const oppTargetTilt = -oppLateralVel * 28;
+          opp.tilt += (oppTargetTilt - opp.tilt) * Math.min(1, dt * 8);
+          opp.tilt = Math.max(-10, Math.min(10, opp.tilt));
+          opp.prevX = oppPrevX;
 
           // Off-road penalty for AI
           if (Math.abs(opp.x) > 0.42) {
@@ -1737,12 +1800,22 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
           const W2 = Math.max(8, 17 * s);
           const H2 = W2 * 0.6;
           const oppDark = darkenHex(opp.color, 60);
-          
-          // Shadow
+
+          // Shadow stays flat on the ground (don't rotate it with the body)
           ctx.fillStyle = 'rgba(0,0,0,0.3)';
           ctx.beginPath();
           ctx.ellipse(cx, cy + 2, W2 * 0.5, H2 * 0.12, 0, 0, Math.PI * 2);
           ctx.fill();
+
+          // Body lean: rotate the rest of the sprite around its base for a roll feel.
+          // Distant cars tilt less so the effect doesn't shimmer at small scales.
+          const oppDrawTilt = (opp.tilt || 0) * Math.min(1, s * 1.2);
+          ctx.save();
+          if (oppDrawTilt !== 0) {
+            ctx.translate(cx, cy);
+            ctx.rotate(oppDrawTilt * Math.PI / 180);
+            ctx.translate(-cx, -cy);
+          }
 
           // Wheels
           ctx.fillStyle = '#0a0a0a';
@@ -1867,6 +1940,8 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
           // Bumper bottom for all
           ctx.fillStyle = '#1a1a1a';
           ctx.fillRect(cx - W2/2 + 4, cy + H2*0.08, W2 - 8, H2*0.06);
+
+          ctx.restore(); // close body lean
         }
       }
 
@@ -2040,11 +2115,40 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
       // Draw player car
       const playerY = H - 35;
       const playerScreenX = W / 2;
-      
-      // Only steering input tilts the player car, so curves don't look assisted
-      const steeringInput = (g.keys.right ? 1 : 0) - (g.keys.left ? 1 : 0);
-      const steerTilt = steeringInput * 3.5;
-      const tilt = steerTilt;
+
+      // Dust skid puffs sit on the ground, drawn before the car so the car overlaps them
+      for (const puff of g.skidTrails) {
+        ctx.fillStyle = `rgba(190, 165, 130, ${Math.max(0, puff.alpha)})`;
+        ctx.beginPath();
+        ctx.arc(puff.x, puff.y, puff.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Speed lines at the screen edges when going fast — purely visual, sells the speed feel
+      const renderSpeedFactor = g.speed / playerMaxSpeed;
+      if (renderSpeedFactor > 0.55) {
+        const lineCount = Math.floor((renderSpeedFactor - 0.5) * 18);
+        ctx.strokeStyle = `rgba(255, 245, 220, ${(renderSpeedFactor - 0.5) * 0.45})`;
+        ctx.lineWidth = 1;
+        const tNow = performance.now() * 0.06;
+        for (let i = 0; i < lineCount; i++) {
+          const seed = i * 73 + 11;
+          const sideLeft = (seed % 2) === 0;
+          const sx = sideLeft
+            ? (seed * 13) % (W * 0.18)
+            : W - (seed * 13) % (W * 0.18);
+          const sy = ((seed * 31 + tNow * 60) % H);
+          const len = 14 + (seed % 12);
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(sx, sy + len);
+          ctx.stroke();
+        }
+      }
+
+      // Body roll comes from smoothed physics (steering input + actual lateral velocity),
+      // so the car visibly leans during natural curve drift, not only on key press.
+      const tilt = g.playerTilt;
 
       ctx.save();
       ctx.translate(playerScreenX, playerY);
