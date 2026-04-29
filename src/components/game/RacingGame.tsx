@@ -404,10 +404,11 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
         // Capture pre-frame X so we can derive lateral velocity for the body lean
         const prevPlayerX = g.playerX;
 
-        // Launch control: tighter ramp so the player's car doesn't jump ahead at the start
-        const launchZone = Math.min(1, g.position / 2400);
+        // Launch control: short ramp so the start feels responsive and the player can
+        // pull away with the AI instead of crawling for the first few seconds.
+        const launchZone = Math.min(1, g.position / 1500);
         const launchCurve = launchZone * launchZone;
-        const playerSpeedCap = playerMaxSpeed * (0.12 + launchCurve * 0.88);
+        const playerSpeedCap = playerMaxSpeed * (0.22 + launchCurve * 0.78);
 
         if (g.keys.up) {
           const speedRatio = g.speed / playerMaxSpeed;
@@ -494,14 +495,17 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
         }
 
         // --- PLAYER-OPPONENT COLLISION ---
+        // First ~300 distance units of the race: skip contact so the grid can spread without
+        // the side-by-side starting positions immediately bouncing the player backward.
+        const launchProtection = g.position < 300;
         for (const opp of g.opponents) {
           const distDiff = Math.abs(opp.distance - g.position);
           const xDiff = g.playerX - opp.x;
           const absX = Math.abs(xDiff);
           const collisionRadiusZ = 160;
           const collisionRadiusX = 0.25;
-          
-          if (distDiff < collisionRadiusZ && absX < collisionRadiusX) {
+
+          if (!launchProtection && distDiff < collisionRadiusZ && absX < collisionRadiusX) {
             // Overlap amount (0 = edge, 1 = fully overlapping)
             const overlapX = 1 - absX / collisionRadiusX;
             const overlapZ = 1 - distDiff / collisionRadiusZ;
@@ -673,13 +677,15 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
           opp.distance += opp.speed * dt * 4;
 
           // Collision avoidance between opponents - solid body
+          // Same launch protection as the player: lets the field spread off the grid cleanly.
+          const oppLaunchProtection = opp.distance < 300;
           for (const other of g.opponents) {
             if (other === opp) continue;
             const distDiff = Math.abs(opp.distance - other.distance);
             const relX = opp.x - other.x;
             const absRelX = Math.abs(relX);
-            
-            if (distDiff < 160 && absRelX < 0.25) {
+
+            if (!oppLaunchProtection && distDiff < 160 && absRelX < 0.25) {
               const overlapX = 1 - absRelX / 0.25;
               const overlapZ = 1 - distDiff / 160;
               const overlap = overlapX * overlapZ;
@@ -1810,7 +1816,7 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
           const s = sprite.scale;
           const cx = sprite.x;
           const cy = sprite.y;
-          const W2 = Math.max(8, 17 * s);
+          const W2 = Math.max(12, 28 * s);
           const H2 = W2 * 0.6;
           const oppDark = darkenHex(opp.color, 70);
           const oppLight = lightenHex(opp.color, 50);
@@ -2144,7 +2150,7 @@ const RacingGame: React.FC<RacingGameProps> = ({ car, trackIndex, onRaceFinish }
 
       ctx.save();
       ctx.translate(playerScreenX, playerY);
-      ctx.scale(0.75, 0.75);
+      ctx.scale(1.15, 1.15);
       ctx.rotate(tilt * Math.PI / 180);
 
       // Shadow
