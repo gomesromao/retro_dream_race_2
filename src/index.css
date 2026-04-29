@@ -1,0 +1,283 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 4%;
+    --foreground: 60 10% 90%;
+
+    --card: 220 25% 8%;
+    --card-foreground: 60 10% 90%;
+
+    --popover: 220 25% 8%;
+    --popover-foreground: 60 10% 90%;
+
+    --primary: 180 100% 50%;
+    --primary-foreground: 220 20% 4%;
+
+    --secondary: 320 100% 60%;
+    --secondary-foreground: 60 10% 90%;
+
+    --muted: 220 15% 15%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 30 100% 55%;
+    --accent-foreground: 220 20% 4%;
+
+    --destructive: 0 80% 50%;
+    --destructive-foreground: 60 10% 90%;
+
+    --border: 220 20% 20%;
+    --input: 220 20% 15%;
+    --ring: 180 100% 50%;
+
+    --radius: 0.25rem;
+
+    /* Game-specific colors */
+    --neon-cyan: 180 100% 50%;
+    --neon-magenta: 320 100% 60%;
+    --neon-orange: 30 100% 55%;
+    --neon-green: 120 100% 45%;
+    --road-dark: 220 15% 12%;
+    --road-light: 220 10% 18%;
+    --sky-top: 220 60% 8%;
+    --sky-bottom: 280 40% 15%;
+    --sunset-orange: 25 100% 50%;
+    --sunset-pink: 340 80% 55%;
+
+    /* CRT Effects */
+    --crt-glow: 0 0 10px hsl(180 100% 50% / 0.5);
+    --crt-scanline: rgba(0, 0, 0, 0.15);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'VT323', monospace;
+  }
+}
+
+@layer components {
+  .font-pixel {
+    font-family: 'Press Start 2P', cursive;
+  }
+
+  .font-retro {
+    font-family: 'VT323', monospace;
+  }
+
+  /* CRT Filter */
+  .crt-filter {
+    position: relative;
+  }
+
+  .crt-filter::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      var(--crt-scanline) 0px,
+      var(--crt-scanline) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .crt-filter::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      ellipse at center,
+      transparent 0%,
+      rgba(0, 0, 0, 0.3) 90%,
+      rgba(0, 0, 0, 0.6) 100%
+    );
+    pointer-events: none;
+    z-index: 101;
+  }
+
+  /* Neon glow effects */
+  .neon-text-cyan {
+    text-shadow: 
+      0 0 5px hsl(var(--neon-cyan)),
+      0 0 10px hsl(var(--neon-cyan)),
+      0 0 20px hsl(var(--neon-cyan) / 0.5);
+  }
+
+  .neon-text-magenta {
+    text-shadow: 
+      0 0 5px hsl(var(--neon-magenta)),
+      0 0 10px hsl(var(--neon-magenta)),
+      0 0 20px hsl(var(--neon-magenta) / 0.5);
+  }
+
+  .neon-text-orange {
+    text-shadow: 
+      0 0 5px hsl(var(--neon-orange)),
+      0 0 10px hsl(var(--neon-orange)),
+      0 0 20px hsl(var(--neon-orange) / 0.5);
+  }
+
+  .neon-border {
+    box-shadow: 
+      0 0 5px hsl(var(--neon-cyan)),
+      0 0 10px hsl(var(--neon-cyan) / 0.5),
+      inset 0 0 5px hsl(var(--neon-cyan) / 0.3);
+  }
+
+  /* Arcade button */
+  .arcade-btn {
+    @apply font-pixel text-sm uppercase tracking-wider;
+    @apply px-6 py-3 border-2;
+    @apply transition-all duration-150;
+    @apply active:scale-95;
+    background: linear-gradient(180deg, hsl(var(--muted)) 0%, hsl(220 25% 10%) 100%);
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+    text-shadow: 0 0 10px hsl(var(--primary));
+    box-shadow: 
+      0 0 10px hsl(var(--primary) / 0.3),
+      0 4px 0 hsl(220 20% 5%),
+      inset 0 1px 0 hsl(220 15% 25%);
+  }
+
+  .arcade-btn:hover {
+    background: linear-gradient(180deg, hsl(var(--primary) / 0.2) 0%, hsl(220 25% 12%) 100%);
+    box-shadow: 
+      0 0 20px hsl(var(--primary) / 0.5),
+      0 4px 0 hsl(220 20% 5%),
+      inset 0 1px 0 hsl(220 15% 25%);
+  }
+
+  .arcade-btn-secondary {
+    border-color: hsl(var(--secondary));
+    color: hsl(var(--secondary));
+    text-shadow: 0 0 10px hsl(var(--secondary));
+    box-shadow: 
+      0 0 10px hsl(var(--secondary) / 0.3),
+      0 4px 0 hsl(220 20% 5%),
+      inset 0 1px 0 hsl(220 15% 25%);
+  }
+
+  .arcade-btn-secondary:hover {
+    background: linear-gradient(180deg, hsl(var(--secondary) / 0.2) 0%, hsl(220 25% 12%) 100%);
+    box-shadow: 
+      0 0 20px hsl(var(--secondary) / 0.5),
+      0 4px 0 hsl(220 20% 5%),
+      inset 0 1px 0 hsl(220 15% 25%);
+  }
+
+  /* Mobile control buttons */
+  .control-btn {
+    @apply w-20 h-20 rounded-full;
+    @apply flex items-center justify-center;
+    @apply text-3xl font-bold;
+    @apply active:scale-90;
+    @apply select-none touch-none;
+    background: radial-gradient(circle at 30% 30%, hsl(220 15% 25%), hsl(220 20% 10%));
+    border: 3px solid hsl(var(--primary));
+    color: hsl(var(--primary));
+    box-shadow: 
+      0 0 15px hsl(var(--primary) / 0.4),
+      0 6px 0 hsl(220 20% 5%),
+      inset 0 2px 0 hsl(220 15% 30%);
+  }
+
+  .control-btn:active {
+    box-shadow: 
+      0 0 20px hsl(var(--primary) / 0.6),
+      0 2px 0 hsl(220 20% 5%),
+      inset 0 2px 0 hsl(220 15% 20%);
+    transform: translateY(4px) scale(0.95);
+  }
+
+  /* Car card */
+  .car-card {
+    @apply p-4 border-2 rounded cursor-pointer transition-all duration-200;
+    background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(220 25% 6%) 100%);
+    border-color: hsl(var(--border));
+  }
+
+  .car-card:hover {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
+  }
+
+  .car-card.selected {
+    border-color: hsl(var(--neon-orange));
+    box-shadow: 
+      0 0 20px hsl(var(--neon-orange) / 0.5),
+      inset 0 0 30px hsl(var(--neon-orange) / 0.1);
+  }
+
+  /* Flicker animation */
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    92% { opacity: 1; }
+    93% { opacity: 0.8; }
+    94% { opacity: 1; }
+    96% { opacity: 0.9; }
+    97% { opacity: 1; }
+  }
+
+  @keyframes scanline-move {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+
+  @keyframes text-glitch {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-2px); }
+    40% { transform: translateX(2px); }
+    60% { transform: translateX(-1px); }
+    80% { transform: translateX(1px); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { 
+      text-shadow: 
+        0 0 5px currentColor,
+        0 0 10px currentColor,
+        0 0 20px currentColor;
+    }
+    50% { 
+      text-shadow: 
+        0 0 10px currentColor,
+        0 0 20px currentColor,
+        0 0 40px currentColor;
+    }
+  }
+
+  @keyframes road-scroll {
+    0% { background-position-y: 0; }
+    100% { background-position-y: 100px; }
+  }
+
+  .animate-flicker {
+    animation: flicker 4s infinite;
+  }
+
+  .animate-glitch {
+    animation: text-glitch 0.3s infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-road {
+    animation: road-scroll 0.1s linear infinite;
+  }
+}
